@@ -1,0 +1,38 @@
+fact_id,topic,correct_answer,rag_doc,verified
+hours_weekday,Weekday hours,Mon-Thu 5:00 AM-10:00 PM; Fri 5:00 AM-9:00 PM,01-club-basics,2026-11-06
+hours_weekend,Weekend hours,Sat-Sun 7:00 AM-6:00 PM,01-club-basics,2026-11-06
+hours_holiday,Holiday hours,Not published,01-club-basics,2026-11-06
+address,Club address,"100 Cedar Avenue, South Windsor, CT 06074 (Evergreen Walk)",01-club-basics,2026-11-06
+phone,Club phone,(860) 466-7628,01-club-basics,2026-11-06
+email,Support email,info@clubstudiofitness.com,01-club-basics,2026-11-06
+price_standard,Standard monthly price,"$169/month, South Windsor only",03-memberships-and-pricing,2026-11-06
+price_standard_plus,Standard Plus monthly price,$209/month; adds Priority Booking and 25 guest passes/year,03-memberships-and-pricing,2026-11-06
+price_premier,Premier monthly price,$249/month; all Club Studio locations; Priority Booking; 25 guest passes/year,03-memberships-and-pricing,2026-11-06
+fees_join,Initiation/annual fee,$0 initiation and $0 annual fee shown online,03-memberships-and-pricing,2026-11-06
+upfront,Upfront payment at join,"First + last month: $338 Standard, $418 Standard Plus, $498 Premier (plus tax)",03-memberships-and-pricing,2026-11-06
+multi_person,Multi-person Standard pricing,"2 for $318, 3 for $467, 4 for $616 per month",03-memberships-and-pricing,2026-11-06
+unlimited,Meaning of unlimited classes,Up to 5 different boutique classes/day; 1 reserved spot per studio per day online,03-memberships-and-pricing,2026-11-06
+booking_window,Standard booking window,"Opens 7 days ahead, 1 hour after class start time",04-booking-and-class-policies,2026-11-06
+priority_window,Priority booking window,"Up to 10 days ahead (Standard Plus, Premier); not guaranteed",03-memberships-and-pricing,2026-11-06
+late_cancel,Late cancel rule,Cancel 12+ hours before class; otherwise $10 late-cancel fee,04-booking-and-class-policies,2026-11-06
+no_show,No-show fee,$15; not checking in can trigger it,04-booking-and-class-policies,2026-11-06
+waitlist,Waitlist behavior,Auto-enrolled when a spot opens; notified by app and email; fees still apply,04-booking-and-class-policies,2026-11-06
+arrival,Arrival time,10 minutes early; 15 for first visit; doors close at start,04-booking-and-class-policies,2026-11-06
+transfer,Transferring a booking,Not allowed,04-booking-and-class-policies,2026-11-06
+gear_reform,Reform gear,Grip socks required,04-booking-and-class-policies,2026-11-06
+gear_box,Box gear,Gloves required; $5 rental; wraps strongly recommended,04-booking-and-class-policies,2026-11-06
+gear_ride,Ride gear,"SPD or Delta cleats, or regular sneakers",04-booking-and-class-policies,2026-11-06
+heat,Heated class temperatures,Hot Pilates up to ~85F; Hot Pilates X Strength ~90F; Yoga Flow ~90-95F; Yoga Restore warm,07-first-visit-guide,2026-11-06
+sat_yoga,Yoga on Saturday,None; nearest: Sun 9:15 AM Yoga Restore or Sat 8:00 AM Hot Pilates,09-caller-faq,2026-11-06
+amenity_pool,Pool and sauna,Indoor pool and sauna confirmed,01-club-basics,2026-11-06
+amenity_steam,Steam room/spa/racquetball/pickleball,Not listed for South Windsor,01-club-basics,2026-11-06
+trial,Free trial,"Options advertised: 1-day guest trial, free 5-day pass, 7-day VIP referral pass; website doesn't say which applies to whom",05-guest-passes-and-trials,2026-11-06
+guest_passes,Guest passes,25/year with Standard Plus and Premier,05-guest-passes-and-trials,2026-11-06
+age,Minimum age,"16, or 13 with legal guardian who signs",03-memberships-and-pricing,2026-11-06
+payment,Dues payment method,EFT from checking/savings or accepted credit card,03-memberships-and-pricing,2026-11-06
+cancel_membership,Cancelling membership,"Front desk, online account, or certified mail to P.O. Box 54170, Irvine, CA 92619",06-membership-changes,2026-11-06
+cancel_timing,Cancellation timing,"Postmark 5+ business days before billing; else one more charge, refunded per FAQ",06-membership-changes,2026-11-06
+freeze,Freeze,$50/month per member; contact club; starts next cycle if billing within 10 days,06-membership-changes,2026-11-06
+ct_locations,Other CT clubs,Norwalk and Stamford coming soon; South Windsor only open CT club,01-club-basics,2026-11-06
+pt,Personal training,Available; prices not published,03-memberships-and-pricing,2026-11-06
+cafe,Cafe,Beaming Cafe juice bar,01-club-basics,2026-11-06
