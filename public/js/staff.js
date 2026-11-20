@@ -169,13 +169,14 @@ async function openDrawer(id) {
   const inc = $('#incoming'); if (inc) inc.innerHTML = ''; // don't let a banner cover the drawer
   const r = S.requests.find(x => x.request_id === id) || await api('/api/requests/' + encodeURIComponent(id));
   let cls = r.class_id ? await api('/api/classes/' + encodeURIComponent(r.class_id)).catch(() => null) : null;
+  let shown = false; // first paint slides in; later repaints must not replay the animation
   const render = () => {
     const cur = S.requests.find(x => x.request_id === id) || r;
     const full = cls && cls.seats_left === 0;
     const confirmLabel = cur.request_type === 'inquiry' ? 'Mark resolved' : full ? 'Add to waitlist' : 'Confirm booking';
     const confirmStatus = cur.request_type === 'inquiry' ? 'resolved' : 'confirmed';
     const pct = cls && cls.capacity ? Math.round(((cls.capacity - (cls.seats_left ?? cls.capacity)) / cls.capacity) * 100) : 0;
-    root.innerHTML = `<div class="drawer-scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Request ${esc(cur.request_id)}">
+    root.innerHTML = `<div class="drawer-scrim" data-close${shown ? ' style="animation:none"' : ''}></div><aside class="drawer${shown ? ' open' : ''}" role="dialog" aria-label="Request ${esc(cur.request_id)}">
       <header class="dr-head"><div><span class="eyebrow">${esc(cur.request_id)} · ${cur.request_type === 'booking' ? 'Booking request' : 'Inquiry'}</span><h2>${esc(cur.caller_name)}</h2></div><button class="icon-btn" data-close aria-label="Close">${icon('close', 18)}</button></header>
       <div class="dr-body">
         <div class="dr-row">${statusPill(cur.status)}${sourcePill(cur.source)}<span class="muted">${ago(cur.created_at)}</span></div>
@@ -201,7 +202,8 @@ async function openDrawer(id) {
         ${cur.status !== 'cancelled' ? `<button class="btn btn-ghost danger" data-act="cancelled">Cancel</button>` : ''}
         <button class="btn btn-ghost" data-flag="${cur.needs_followup === 'yes' ? 'no' : 'yes'}">${cur.needs_followup === 'yes' ? 'Clear flag' : 'Flag follow-up'}</button>
       </footer></aside>`;
-    requestAnimationFrame(() => $('.drawer', root)?.classList.add('open'));
+    if (!shown) requestAnimationFrame(() => $('.drawer', root)?.classList.add('open'));
+    shown = true;
   };
   render();
   const off = subscribe(async (type, data) => {
@@ -217,8 +219,10 @@ async function openDrawer(id) {
     try {
       const body = act ? { status: act.dataset.act, staff_notes: notes } : { needs_followup: flag.dataset.flag, staff_notes: notes };
       const out = await api('/api/requests/' + encodeURIComponent(id), { method: 'PATCH', body });
-      upsert(out.request); if (out.class) cls = out.class; emit('updated', out.request); refreshStats(); render();
+      upsert(out.request); if (out.class) cls = out.class; emit('updated', out.request); refreshStats();
       if (out.note) toast(out.note);
+      // Confirm / waitlist / resolve / cancel finish the job: close the panel. Reopen and flag changes keep it open.
+      if (act && act.dataset.act !== 'pending') close(); else render();
     } catch (ex) { toast('Could not update: ' + ex.message); }
   };
   root.onfocusout = async e => {
