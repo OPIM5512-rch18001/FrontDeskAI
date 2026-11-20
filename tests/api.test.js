@@ -32,7 +32,8 @@ before(async () => {
 test('health and config', async () => {
   assert.equal((await get(base, '/api/health')).ok, true);
   const c = await get(base, '/api/config');
-  assert.equal(c.phoneConfigured, false);
+  assert.equal(c.phoneConfigured, true);
+  assert.equal(c.phone, '(860) 750-8999');
 });
 
 test('flat payload creates a pending booking request for the matched class', async () => {

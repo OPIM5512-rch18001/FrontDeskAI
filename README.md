@@ -31,7 +31,7 @@ Optional settings go in a `.env` file (copy `.env.example`) or in your host's en
 | Variable          | What it does                                                                 |
 |-------------------|------------------------------------------------------------------------------|
 | `PORT`            | Port to listen on (default 3000; hosts set this for you)                     |
-| `FRONTDESK_PHONE` | The number callers dial to reach the agent. Shown on the site. Blank = placeholder `(555) 000-0000` |
+| `FRONTDESK_PHONE` | The number callers dial to reach the agent. Shown on the site. Defaults to `(860) 750-8999` (set in `src/config.js`); the env var overrides it |
 | `API_KEY`         | If set, `POST /api/bookings`, `/api/availability` and `/api/retell/webhook` require it |
 | `DB_PATH`         | SQLite file location (default `./data/frontdesk.db`)                         |
 

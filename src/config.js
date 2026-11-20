@@ -19,7 +19,7 @@ const dbPath = process.env.DB_PATH || './data/frontdesk.db';
 
 export const config = {
   port: Number(process.env.PORT) || 3000,
-  phone: (process.env.FRONTDESK_PHONE || '').trim(),
+  phone: (process.env.FRONTDESK_PHONE || '(860) 750-8999').trim(),
   apiKey: (process.env.API_KEY || '').trim(),
   dbPath: path.isAbsolute(dbPath) ? dbPath : path.join(ROOT, dbPath),
   dataDir: path.join(ROOT, 'data'),
