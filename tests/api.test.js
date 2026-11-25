@@ -36,6 +36,17 @@ test('health and config', async () => {
   assert.equal(c.phone, '(860) 750-8999');
 });
 
+test('availability can suggest open classes for a day without a class preference', async () => {
+  const c = upcoming.find(x => x.seats_left > 0);
+  const r = await post(base, '/api/availability', { args: { class_date: c.date } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.result, 'options');
+  assert.ok(r.body.options.length > 0 && r.body.options.length <= 2);
+  assert.ok(r.body.options.every(option => option.date === c.date && option.seats_left > 0));
+  const past = await post(base, '/api/availability', { class_date: '2000-01-01' });
+  assert.equal(past.body.result, 'none');
+});
+
 test('flat payload creates a pending booking request for the matched class', async () => {
   const c = upcoming.find(x => x.class_name === 'Reform' && x.seats_left > 2);
   const r = await post(base, '/api/bookings', { caller_name: 'Test One', caller_phone: '860-555-0001', class_name: 'reformer', class_date: c.date, class_time: c.start_time });
@@ -147,4 +158,73 @@ test('static pages are served, and unknown API paths 404', async () => {
   assert.equal((await fetch(base + '/css/base.css')).status, 200);
   assert.equal((await fetch(base + '/api/nope')).status, 404);
   assert.equal((await fetch(base + '/../server.js')).status === 200, false);
+});
+
+test('Retell-only listener shares the staff database and excludes staff routes', async () => {
+  const key = 'integration-test-key';
+  const local = await start(3903, { API_KEY: key, RETELL_PORT: '3904' });
+  const agent = 'http://127.0.0.1:3904';
+  const payload = { args: { caller_name: 'Demo Caller', caller_phone: '860-555-0142', questions_asked: 'Do you offer parking?' }, call: { call_id: 'demo-call-1' } };
+  assert.equal((await fetch(agent + '/api/requests', { headers: { 'x-api-key': key } })).status, 404);
+  assert.equal((await fetch(agent + '/api/admin/reset', { method: 'POST', headers: { 'x-api-key': key } })).status, 404);
+  assert.equal((await fetch(agent + '/')).status, 404);
+  assert.equal((await fetch(agent + '/api/bookings', { method: 'POST' })).status, 401);
+  const first = await post(agent, '/api/bookings', payload, { 'x-api-key': key });
+  assert.equal(first.body.status, 'pending');
+  const repeat = await post(agent, '/api/bookings', payload, { 'x-api-key': key });
+  assert.equal(repeat.body.request_id, first.body.request_id);
+  assert.equal((await get(local, '/api/requests/' + first.body.request_id)).caller_name, 'Demo Caller');
+});
+
+test('public visitors see customer pages and signed-in staff share the same requests', async () => {
+  const host = await start(3905, { STAFF_PASSWORD: 'password', API_KEY: 'test-agent-key' });
+  assert.equal((await fetch(host)).status, 200);
+  assert.equal((await fetch(host + '/api/classes')).status, 200);
+  assert.deepEqual(await get(host, '/api/staff/session'), { signedIn: false });
+  for (const route of ['/api/requests', '/api/stats', '/api/activity', '/api/stream']) {
+    assert.equal((await fetch(host + route)).status, 401);
+  }
+  assert.equal((await post(host, '/api/admin/reset', {})).status, 401);
+  assert.equal((await post(host, '/api/staff/session', { password: 'wrong' })).status, 401);
+
+  const signIn = async () => {
+    const res = await fetch(host + '/api/staff/session', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'password' }),
+    });
+    assert.equal(res.status, 200);
+    return res.headers.get('set-cookie').split(';')[0];
+  };
+  const [first, second] = await Promise.all([signIn(), signIn()]);
+  const saved = await post(host, '/api/bookings', { caller_name: 'Shared Demo Test', questions_asked: 'Class question' }, { 'x-api-key': 'test-agent-key' });
+  const id = saved.body.request_id;
+  assert.ok(id);
+  for (const cookie of [first, second]) {
+    const response = await fetch(host + '/api/requests/' + id, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).caller_name, 'Shared Demo Test');
+  }
+
+  const classRow = (await get(host, `/api/classes?from=${(await get(host, '/api/config')).today}`))
+    .find(c => Date.parse(c.start_iso) > Date.now() && c.seats_left > 0);
+  const headers = { 'content-type': 'application/json', 'x-api-key': 'test-agent-key' };
+  const call = { call_id: 'delete-test-call', from_number: '860-555-0159' };
+  await post(host, '/api/retell/webhook', { event: 'call_started', call }, headers);
+  const booking = await post(host, '/api/bookings', { call, args: { caller_name: 'Delete Test', class_id: classRow.class_id } }, headers);
+  const path = '/api/requests/' + booking.body.request_id;
+  const confirmed = await fetch(host + path, {
+    method: 'PATCH', headers: { cookie: first, 'content-type': 'application/json' }, body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal((await confirmed.json()).class.seats_left, classRow.seats_left - 1);
+  assert.equal((await fetch(host + path, { method: 'DELETE' })).status, 401);
+  const response = await fetch(host + path, { method: 'DELETE', headers: { cookie: first } });
+  assert.equal(response.status, 200);
+  const deleted = await response.json();
+  assert.equal(deleted.class.seats_left, classRow.seats_left);
+  assert.ok(deleted.activityIds.length >= 3);
+  assert.equal((await fetch(host + path, { headers: { cookie: second } })).status, 404);
+  assert.equal((await fetch(host + path, { method: 'DELETE', headers: { cookie: second } })).status, 404);
+  const activity = await fetch(host + '/api/activity', { headers: { cookie: second } }).then(res => res.json());
+  assert.ok(activity.every(a => a.request_id !== deleted.requestId && a.meta?.call_id !== call.call_id));
+  const another = await post(host, '/api/bookings', { caller_name: 'Next Request', questions_asked: 'Class question' }, headers);
+  assert.notEqual(another.body.request_id, deleted.requestId);
 });

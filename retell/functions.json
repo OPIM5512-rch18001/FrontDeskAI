@@ -1,0 +1,37 @@
+[
+  {
+    "name": "check_class_availability",
+    "description": "Look up available classes for the requested day. Omit the class name when the caller is open to any class. Use before collecting or saving a class request.",
+    "method": "POST",
+    "path": "/api/availability",
+    "payload_args_only": false,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "class_name": {"type": "string", "description": "Class name or the caller's alias, such as spin"},
+        "class_date": {"type": "string", "description": "Date as YYYY-MM-DD or an unambiguous expression such as tomorrow"},
+        "class_time": {"type": "string", "description": "Local start time including AM or PM if known"}
+      },
+      "required": ["class_date"]
+    }
+  },
+  {
+    "name": "submit_booking_request",
+    "description": "Save a pending fictional demo class request or inquiry for staff. Use only after the caller explicitly confirms the request details. This cannot confirm a booking.",
+    "method": "POST",
+    "path": "/api/bookings",
+    "payload_args_only": false,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "caller_name": {"type": "string", "description": "Fictional demo caller name"},
+        "caller_phone": {"type": "string", "description": "Fictional callback number supplied for the demo"},
+        "class_id": {"type": "string", "description": "Exact ID returned by the availability tool. Omit for a question-only inquiry."},
+        "questions_asked": {"type": "string", "description": "Question the caller asked staff to follow up on. Omit for a class-only request."},
+        "needs_followup": {"type": "string", "enum": ["yes", "no"]},
+        "call_summary": {"type": "string", "description": "One sentence summarizing the confirmed demo request, without other personal details"}
+      },
+      "required": ["caller_name", "caller_phone"]
+    }
+  }
+]

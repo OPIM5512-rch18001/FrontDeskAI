@@ -44,6 +44,20 @@ and an activity feed). If the file is ever deleted or wiped by a host restart, i
 
 Retell reaches this server over the internet, so it needs a **public HTTPS URL** (see section 4).
 
+### Render web service
+
+Deploy this repository as a Node web service with `npm install` as the build command, `npm start` as the start command, and `/api/health` as the health check. Set `API_KEY` and `STAFF_PASSWORD` as environment variables in Render. Leave `RETELL_PORT` unset. Render supplies `PORT` and the app listens on it for both the website and the Retell tools.
+
+In Retell, use the Render origin with `POST /api/availability` and `POST /api/bookings`, passing the `API_KEY` value in an `x-api-key` header. Open `/#/staff/requests` and sign in with the staff passphrase. Open the dashboard before a rehearsal to wake a Free instance. Its SQLite data is temporary and will be reseeded after a restart or spin-down.
+
+### Local staff dashboard with a Retell-only tunnel
+
+Set `API_KEY` to a generated secret and `RETELL_PORT=3911` in `.env`, then run `npm start`. Open the staff dashboard at `http://localhost:3000/#/staff`. Point the HTTPS tunnel at `http://127.0.0.1:3911`. This listener accepts the two tool POSTs with `x-api-key`. The dashboard, live event stream, and reset stay on the local website port.
+
+Use an unpublished Single Prompt copy for rehearsal. Copy the tool definitions from `retell/functions.json` with the tunnel origin as the base URL. Add `x-api-key` to both tools and leave **Payload: args only** off so retries keep the Retell call ID. Add `retell/intake-instructions.txt` and remove the old FAQ-only lines that forbid those two operations. Leave the optional webhook unset. Update both function URLs when a temporary tunnel hostname changes.
+
+Use a fictional name and callback number. Choose a future class from the site, ask the agent to check it, confirm the details, and verify that one pending request appears. Confirm it from the dashboard and check that the simulated seat count drops by one. Test a caller correction and a declined request. Use the dashboard’s labeled simulation if the connection fails during the presentation.
+
 ### Add a custom function to the single-prompt agent
 
 In the Retell dashboard: *Agent → Functions → Add → Custom Function*.

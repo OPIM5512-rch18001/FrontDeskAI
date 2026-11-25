@@ -10,8 +10,8 @@ let shellMode = null;
 export function modeToggle(mode) {
   return `<div class="mode-toggle" data-mode="${mode}" role="group" aria-label="Switch between customer and staff view">
     <span class="knob"></span>
-    <button type="button" data-go="customer" aria-pressed="${mode === 'customer'}">${icon('users', 15)} Customer</button>
-    <button type="button" data-go="staff" aria-pressed="${mode === 'staff'}">${icon('grid', 15)} Staff</button>
+    <button type="button" data-go="customer" aria-pressed="${mode === 'customer'}">Customer</button>
+    <button type="button" data-go="staff" aria-pressed="${mode === 'staff'}">Staff</button>
   </div>`;
 }
 function wireToggle(scope) {
@@ -23,10 +23,11 @@ const NAV = [['/', 'Home'], ['/classes', 'Classes'], ['/membership', 'Membership
 function customerShell() {
   document.body.className = 'mode-customer' + (document.body.classList.contains('present') ? ' present' : '');
   $('#app').innerHTML = `
+  ${modeToggle('customer')}
   <header class="site-header" id="hdr"><div class="wrap hdr">
     <a class="brand" href="#/" aria-label="Club Studio home"><b><i></i>Club Studio</b><small>Powered by <em>FrontDesk AI</em></small></a>
     <nav class="nav" id="nav" aria-label="Main">${NAV.map(([p, l]) => `<a href="#${p}" data-p="${p}">${l}</a>`).join('')}</nav>
-    <div class="hdr-right">${modeToggle('customer')}<a class="btn btn-primary btn-sm btn-call" href="#/classes">${icon('cal', 16)} Book a class</a><button class="menu-btn" id="menu" aria-label="Menu" aria-expanded="false">${icon('down', 20)}</button></div>
+    <div class="hdr-right"><a class="btn btn-primary btn-sm btn-call" href="#/classes">${icon('cal', 16)} Book a class</a><button class="menu-btn" id="menu" aria-label="Menu" aria-expanded="false">${icon('down', 20)}</button></div>
   </div></header>
   <main id="main-wrap"></main><div id="footer"></div>`;
   wireToggle($('#app'));
@@ -44,6 +45,29 @@ function mount(wrapSel) {
   return main;
 }
 
+function staffSignIn() {
+  shellMode = 'customer';
+  customerShell();
+  mount('#main-wrap').innerHTML = `<section class="wrap" style="max-width:460px;padding-block:64px">
+    <h1>Staff sign-in</h1>
+    <form id="staff-sign-in">
+      <label for="staff-password">Staff password</label>
+      <input id="staff-password" class="input" type="password" autocomplete="current-password" required>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+      <p id="staff-sign-in-error" role="alert"></p>
+    </form>
+  </section>`;
+  $('#staff-sign-in').onsubmit = async event => {
+    event.preventDefault();
+    const error = $('#staff-sign-in-error');
+    try {
+      await api('/api/staff/session', { method: 'POST', body: { password: $('#staff-password').value } });
+      await route();
+    } catch (err) { error.textContent = err.message; }
+  };
+  document.title = 'Staff sign-in · FrontDesk AI';
+}
+
 async function route() {
   const dlg = $('#modal'); if (dlg?.open) dlg.close();
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
@@ -51,6 +75,11 @@ async function route() {
   const [path, qs] = h.split('?');
   const params = new URLSearchParams(qs || '');
   const isStaff = path.startsWith('/staff');
+  if (isStaff) {
+    const session = await api('/api/staff/session').catch(() => null);
+    if (h !== (location.hash.replace(/^#/, '') || '/')) return;
+    if (!session?.signedIn) return staffSignIn();
+  }
   const mode = isStaff ? 'staff' : 'customer';
   if (mode !== shellMode) {
     shellMode = mode;

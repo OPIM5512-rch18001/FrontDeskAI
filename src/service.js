@@ -1,5 +1,5 @@
 import {
-  db, getClass, getRequest, findByCallId, insertRequest, patchRequest, setRequestStatus,
+  db, getClass, getRequest, findByCallId, insertRequest, patchRequest, setRequestStatus, deleteRequest,
   addActivity, listClasses
 } from './db.js';
 import { resolveClass, describeClass } from './matcher.js';
@@ -159,6 +159,14 @@ export function staffUpdate(id, patch) {
   const request = getRequest(id);
   publish('request.updated', request);
   return { request, note, class: request.class_id ? getClass(request.class_id) : null };
+}
+
+export function staffDelete(id) {
+  const result = deleteRequest(id);
+  if (!result) return null;
+  publish('request.deleted', { requestId: result.requestId, activityIds: result.activityIds });
+  if (result.class) publish('class.updated', result.class);
+  return result;
 }
 
 // ---------- simulation (no real phone call needed) ----------

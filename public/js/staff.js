@@ -20,6 +20,17 @@ function upsert(r) {
   S.requests.sort((a, b) => (b.created_at.localeCompare(a.created_at)) || b.request_id.localeCompare(a.request_id));
 }
 
+function removeRequest({ requestId, activityIds }) {
+  S.requests = S.requests.filter(r => r.request_id !== requestId);
+  S.activity = S.activity.filter(a => !activityIds.includes(a.id));
+  S.fresh.delete(requestId);
+  const incoming = $('#incoming .banner');
+  if (incoming?.querySelector('[data-open]')?.dataset.open === requestId ||
+      activityIds.includes(Number(incoming?.dataset.activityId))) incoming.remove();
+  emit('deleted', requestId);
+  refreshStats().catch(() => {});
+}
+
 function beep() {
   if (!S.sound) return;
   try {
@@ -40,6 +51,7 @@ function connect() {
     refreshStats(); emit('created', r); showIncoming(r); beep();
   });
   es.addEventListener('request.updated', e => { const r = JSON.parse(e.data); upsert(r); emit('updated', r); refreshStats(); });
+  es.addEventListener('request.deleted', e => removeRequest(JSON.parse(e.data)));
   es.addEventListener('class.updated', e => emit('class', JSON.parse(e.data)));
   es.addEventListener('activity', e => {
     const a = JSON.parse(e.data); S.activity.unshift(a); S.activity.length = Math.min(S.activity.length, 60);
@@ -99,7 +111,7 @@ const NAV = [['overview', 'grid', 'Overview'], ['requests', 'inbox', 'Requests']
 
 export function shell(ctx, toggleHtml, wireToggle) {
   document.body.className = 'mode-staff' + (document.body.classList.contains('present') ? ' present' : '');
-  $('#app').innerHTML = `<div class="staff-app">
+  $('#app').innerHTML = `${toggleHtml}<div class="staff-app">
     <aside class="sidebar">
       <a class="s-brand" href="#/staff"><span class="s-mark">${icon('sparkle', 18, 2)}</span><span class="s-name"><b>FrontDesk AI</b><small>Staff console</small></span></a>
       <nav class="s-nav" aria-label="Staff">${NAV.map(([k, i, l]) => `<a href="#/staff${k === 'overview' ? '' : '/' + k}" data-k="${k}">${icon(i, 19)}<span>${l}</span>${k === 'requests' ? '<em class="nav-badge" id="nav-badge" hidden></em>' : ''}</a>`).join('')}</nav>
@@ -112,7 +124,6 @@ export function shell(ctx, toggleHtml, wireToggle) {
           <span class="conn" id="conn" data-state="${S.conn}"><i></i><span>Connecting…</span></span>
           <button class="icon-btn" id="snd" aria-pressed="${S.sound}" title="Play a sound when a request arrives">${icon('sparkle', 18)}<span class="sr">Sound</span></button>
           <button class="icon-btn" id="prs" aria-pressed="${document.body.classList.contains('present')}" title="Presentation mode: larger text">${icon('expand', 18)}<span class="sr">Presentation mode</span></button>
-          ${toggleHtml}
         </div>
       </header>
       <div id="staff-content"></div>
@@ -158,7 +169,7 @@ function showIncoming(r) {
 }
 function showCall(a) {
   const el = $('#incoming'); if (!el) return;
-  el.innerHTML = `<div class="banner banner-call" role="status"><span class="b-ico ring">${icon('phone', 24)}</span>
+  el.innerHTML = `<div class="banner banner-call" role="status" data-activity-id="${a.id}"><span class="b-ico ring">${icon('phone', 24)}</span>
     <div class="b-text"><small>Incoming call</small><b>${esc(a.message.replace(/^Incoming call from /, '').replace(' (simulated)', ''))}</b><span>FrontDesk AI is on the line${a.meta?.simulated ? ' (simulated)' : ''}…</span></div></div>`;
   clearTimeout(callTimer); callTimer = setTimeout(() => { if ($('.banner-call', el)) el.innerHTML = ''; }, 14000);
 }
@@ -169,8 +180,10 @@ async function openDrawer(id) {
   const inc = $('#incoming'); if (inc) inc.innerHTML = ''; // don't let a banner cover the drawer
   const r = S.requests.find(x => x.request_id === id) || await api('/api/requests/' + encodeURIComponent(id));
   let cls = r.class_id ? await api('/api/classes/' + encodeURIComponent(r.class_id)).catch(() => null) : null;
+  let closed = false;
   let shown = false; // first paint slides in; later repaints must not replay the animation
   const render = () => {
+    if (closed) return;
     const cur = S.requests.find(x => x.request_id === id) || r;
     const full = cls && cls.seats_left === 0;
     const confirmLabel = cur.request_type === 'inquiry' ? 'Mark resolved' : full ? 'Add to waitlist' : 'Confirm booking';
@@ -201,18 +214,44 @@ async function openDrawer(id) {
         ${cur.status !== 'pending' ? `<button class="btn btn-ghost" data-act="pending">Reopen</button>` : ''}
         ${cur.status !== 'cancelled' ? `<button class="btn btn-ghost danger" data-act="cancelled">Cancel</button>` : ''}
         <button class="btn btn-ghost" data-flag="${cur.needs_followup === 'yes' ? 'no' : 'yes'}">${cur.needs_followup === 'yes' ? 'Clear flag' : 'Flag follow-up'}</button>
+        <button class="btn btn-ghost danger" data-delete>Delete request</button>
       </footer></aside>`;
     if (!shown) requestAnimationFrame(() => $('.drawer', root)?.classList.add('open'));
     shown = true;
   };
   render();
   const off = subscribe(async (type, data) => {
-    if (type === 'class' && data.class_id === r.class_id) { cls = data; render(); }
+    if (type === 'deleted' && data === id) close();
+    else if (type === 'class' && data.class_id === r.class_id) { cls = data; render(); }
     else if (type === 'updated' && data.request_id === id) { if (r.class_id) cls = await api('/api/classes/' + encodeURIComponent(r.class_id)).catch(() => cls); render(); }
   });
-  const close = () => { off(); const d = $('.drawer', root); d?.classList.remove('open'); setTimeout(() => { root.innerHTML = ''; }, 220); };
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    off();
+    const drawer = $('.drawer', root);
+    drawer?.classList.remove('open');
+    setTimeout(() => { if ($('.drawer', root) === drawer) root.replaceChildren(); }, 220);
+  };
   root.onclick = async e => {
     if (e.target.closest('[data-close]')) return close();
+    const deleteButton = e.target.closest('[data-delete]');
+    if (deleteButton) {
+      if (!confirm('Permanently delete this request and its activity from FrontDesk AI?')) return;
+      deleteButton.disabled = true;
+      try {
+        const out = await api('/api/requests/' + encodeURIComponent(id), { method: 'DELETE' });
+        removeRequest(out);
+        if (out.class) emit('class', out.class);
+        toast('Request deleted');
+      } catch (error) {
+        if (!closed) {
+          deleteButton.disabled = false;
+          toast('Could not delete: ' + error.message);
+        }
+      }
+      return;
+    }
     const act = e.target.closest('[data-act]'), flag = e.target.closest('[data-flag]');
     if (!act && !flag) return;
     const notes = $('#dr-notes', root)?.value;
@@ -328,7 +367,7 @@ async function schedule(root, ctx) {
   $('#dtoday', root).onclick = () => { day = ctx.config.today; draw(); };
   return subscribe(async (type, data) => {
     if (type === 'class') { await draw(); const el = $(`[data-cid="${CSS.escape(data.class_id)}"]`, root); el?.classList.add('flash'); }
-    else if (type === 'loaded' || type === 'updated' || type === 'created') draw();
+    else if (type === 'loaded' || type === 'updated' || type === 'created' || type === 'deleted') draw();
   });
 }
 

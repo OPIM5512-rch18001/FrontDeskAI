@@ -1,13 +1,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 import {
   listClasses, getClass, listCatalog, listRequests, getRequest, stats, listActivity, resetDemo
 } from './db.js';
-import { submitRequest, staffUpdate, runSimulation, handleRetellEvent } from './service.js';
-import { resolveClass } from './matcher.js';
+import { submitRequest, staffUpdate, staffDelete, runSimulation, handleRetellEvent } from './service.js';
+import { parseDate, resolveClass } from './matcher.js';
 import { addClient, clientCount } from './events.js';
 import { etISO, etDate } from './time.js';
+
+const staffPassword = process.env.STAFF_PASSWORD;
+const staffToken = randomBytes(32).toString('hex');
+const staffCookie = 'frontdesk_staff';
+const staffPaths = new Set(['/api/requests', '/api/stats', '/api/activity', '/api/stream', '/api/simulate', '/api/admin/reset']);
+
+function equalSecret(actual, expected) {
+  const left = Buffer.from(typeof actual === 'string' ? actual : '');
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function staffSignedIn(req) {
+  const entry = (req.headers.cookie || '').split(';').map(item => item.trim())
+    .find(item => item.startsWith(`${staffCookie}=`));
+  return equalSecret(entry?.slice(staffCookie.length + 1), staffToken);
+}
 
 const json = (res, code, body) => {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
@@ -37,12 +55,27 @@ export async function handleApi(req, res, url) {
   const p = url.pathname.replace(/\/+$/, '');
   const m = req.method;
   if (m === 'OPTIONS') {
-    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization' });
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization' });
     return res.end();
   }
   const q = Object.fromEntries(url.searchParams);
 
   try {
+    if (p === '/api/staff/session') {
+      if (m === 'GET') return json(res, 200, { signedIn: !staffPassword || staffSignedIn(req) });
+      if (m === 'POST') {
+        if (staffPassword && !equalSecret((await readBody(req))?.password, staffPassword)) {
+          return json(res, 401, { error: 'Incorrect staff password.' });
+        }
+        const secure = req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https' || process.env.CODESPACES === 'true';
+        res.setHeader('Set-Cookie', `${staffCookie}=${staffToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure ? '; Secure' : ''}`);
+        return json(res, 200, { signedIn: true });
+      }
+    }
+    if (staffPassword && (staffPaths.has(p) || p.startsWith('/api/requests/')) && !staffSignedIn(req)) {
+      return json(res, 401, { error: 'Staff sign-in required.' });
+    }
+
     // ----- public reads -----
     if (m === 'GET' && p === '/api/health') return json(res, 200, { ok: true, time: etISO(), liveClients: clientCount() });
     if (m === 'GET' && p === '/api/config') return json(res, 200, {
@@ -78,6 +111,10 @@ export async function handleApi(req, res, url) {
       const out = staffUpdate(decodeURIComponent(p.slice(14)), await readBody(req));
       return out ? json(res, 200, out) : json(res, 404, { error: 'Request not found' });
     }
+    if (m === 'DELETE' && p.startsWith('/api/requests/')) {
+      const out = staffDelete(decodeURIComponent(p.slice(14)));
+      return out ? json(res, 200, out) : json(res, 404, { error: 'Request not found' });
+    }
     if (m === 'GET' && p === '/api/stats') return json(res, 200, stats());
     if (m === 'GET' && p === '/api/activity') return json(res, 200, listActivity(Number(q.limit) || 50));
     if (m === 'POST' && p === '/api/simulate') {
@@ -104,8 +141,23 @@ export async function handleApi(req, res, url) {
       if (p === '/api/availability' && (m === 'GET' || m === 'POST')) {
         const args = m === 'GET' ? q : (await readBody(req));
         const a = args.args || args;
-        const r = resolveClass({ class_id: a.class_id, class_name: a.class_name || a.class, class_date: a.class_date || a.date, class_time: a.class_time || a.time });
         const slim = c => ({ class_id: c.class_id, class_name: c.class_name, date: c.date, weekday: c.weekday, start_time: c.start_time, seats_left: c.seats_left, waitlist: c.waitlist, status: c.status, instructor: c.instructor });
+        const className = a.class_name || a.class;
+        const classDate = a.class_date || a.date;
+        if (!a.class_id && !String(className || '').trim() && !a.class_time && !a.time) {
+          const date = parseDate(classDate);
+          if (!date) return json(res, 200, { result: 'none', message: 'Ask which day the caller prefers.' });
+          const now = Date.now();
+          const open = listClasses({ from: date, to: date })
+            .filter(c => Date.parse(c.start_iso) > now && c.status !== 'holiday_unconfirmed' && c.seats_left > 0);
+          if (!open.length) return json(res, 200, { result: 'none', date, message: 'No upcoming classes have openings that day.' });
+          const first = open.find(c => c.start_iso.slice(11, 16) >= '08:00') || open[0];
+          const later = open.filter(c => c.start_iso > first.start_iso);
+          const second = later.find(c => c.start_iso.slice(11, 16) >= '16:00' && c.class_name !== first.class_name)
+            || later.find(c => c.class_name !== first.class_name) || later[0] || open.find(c => c !== first);
+          return json(res, 200, { result: 'options', date, options: (second ? [first, second] : [first]).map(slim) });
+        }
+        const r = resolveClass({ class_id: a.class_id, class_name: className, class_date: classDate, class_time: a.class_time || a.time });
         return json(res, 200, { result: r.kind, class: r.cls ? slim(r.cls) : undefined, options: r.options?.slice(0, 8).map(slim), message: r.reason });
       }
       if (m === 'POST' && p === '/api/retell/webhook') {
