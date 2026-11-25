@@ -17,7 +17,7 @@ body.mode-staff{background:#f3f3f8}
 .club-card b{letter-spacing:.1em;text-transform:uppercase;font-size:.78rem}.club-card span{font-size:.8rem;color:rgba(255,255,255,.6)}
 .dev-tag{font-size:.7rem;color:rgba(255,255,255,.45);padding:0 6px;line-height:1.4}
 .staff-main{min-width:0;padding:0 clamp(18px,2.6vw,38px) 48px}
-.staff-top{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:26px 0 22px;flex-wrap:wrap}
+.staff-top{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:26px 0 22px;padding-inline-end:calc(var(--mode-width) + 12px);flex-wrap:wrap}
 .staff-top h1{font-size:clamp(1.8rem,3vw,2.5rem);letter-spacing:-.045em}
 .staff-top p{color:var(--muted);margin-top:6px}
 .top-actions{display:flex;align-items:center;gap:12px}
@@ -177,9 +177,11 @@ body.mode-staff{background:#f3f3f8}
 }
 @media (max-width:640px){
   .staff-app{grid-template-columns:1fr}
-  .sidebar{position:static;height:auto;flex-direction:row;padding:10px 12px;justify-content:space-between}
+  .sidebar{position:static;height:auto;flex-direction:row;flex-wrap:wrap;gap:8px;padding:10px calc(var(--mode-width) + var(--mode-inset) + 8px) 10px 12px;justify-content:space-between}
   .s-nav{display:flex}
+  .s-nav a{padding:10px 9px}
   .s-brand .s-name{display:none}
+  .staff-top{padding-inline-end:0}
 }
 
 .stack{display:flex;flex-direction:column;gap:6px;align-items:flex-start}

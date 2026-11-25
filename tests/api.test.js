@@ -203,4 +203,28 @@ test('public visitors see customer pages and signed-in staff share the same requ
     assert.equal(response.status, 200);
     assert.equal((await response.json()).caller_name, 'Shared Demo Test');
   }
+
+  const classRow = (await get(host, `/api/classes?from=${(await get(host, '/api/config')).today}`))
+    .find(c => Date.parse(c.start_iso) > Date.now() && c.seats_left > 0);
+  const headers = { 'content-type': 'application/json', 'x-api-key': 'test-agent-key' };
+  const call = { call_id: 'delete-test-call', from_number: '860-555-0159' };
+  await post(host, '/api/retell/webhook', { event: 'call_started', call }, headers);
+  const booking = await post(host, '/api/bookings', { call, args: { caller_name: 'Delete Test', class_id: classRow.class_id } }, headers);
+  const path = '/api/requests/' + booking.body.request_id;
+  const confirmed = await fetch(host + path, {
+    method: 'PATCH', headers: { cookie: first, 'content-type': 'application/json' }, body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal((await confirmed.json()).class.seats_left, classRow.seats_left - 1);
+  assert.equal((await fetch(host + path, { method: 'DELETE' })).status, 401);
+  const response = await fetch(host + path, { method: 'DELETE', headers: { cookie: first } });
+  assert.equal(response.status, 200);
+  const deleted = await response.json();
+  assert.equal(deleted.class.seats_left, classRow.seats_left);
+  assert.ok(deleted.activityIds.length >= 3);
+  assert.equal((await fetch(host + path, { headers: { cookie: second } })).status, 404);
+  assert.equal((await fetch(host + path, { method: 'DELETE', headers: { cookie: second } })).status, 404);
+  const activity = await fetch(host + '/api/activity', { headers: { cookie: second } }).then(res => res.json());
+  assert.ok(activity.every(a => a.request_id !== deleted.requestId && a.meta?.call_id !== call.call_id));
+  const another = await post(host, '/api/bookings', { caller_name: 'Next Request', questions_asked: 'Class question' }, headers);
+  assert.notEqual(another.body.request_id, deleted.requestId);
 });

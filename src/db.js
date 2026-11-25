@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS requests (
 );
 CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at);
 CREATE INDEX IF NOT EXISTS idx_requests_call ON requests(call_id);
+CREATE TABLE IF NOT EXISTS request_sequences (day TEXT PRIMARY KEY, last_number INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS activity (
   id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, type TEXT, request_id TEXT, message TEXT, meta TEXT
 );
@@ -190,7 +191,8 @@ export function findByCallId(callId) { return callId ? db.prepare('SELECT * FROM
 function nextRequestId(createdIso) {
   const day = createdIso.slice(0, 10).replaceAll('-', '');
   const last = db.prepare(`SELECT request_id FROM requests WHERE request_id LIKE ? ORDER BY request_id DESC LIMIT 1`).get(`REQ-${day}-%`);
-  const n = last ? Number(last.request_id.split('-')[2]) + 1 : 1;
+  const sequence = db.prepare('SELECT last_number FROM request_sequences WHERE day = ?').get(day);
+  const n = Math.max(last ? Number(last.request_id.split('-')[2]) : 0, sequence?.last_number || 0) + 1;
   return `REQ-${day}-${String(n).padStart(4, '0')}`;
 }
 
@@ -216,18 +218,45 @@ export function patchRequest(id, patch) {
   return getRequest(id);
 }
 
+function releaseRequestSeat(request) {
+  if (!request.class_id) return null;
+  if (request.seat_counted === 1) return setSeats(request.class_id, { seatsDelta: -1 });
+  if (request.seat_counted === 2) return setSeats(request.class_id, { waitDelta: -1 });
+  return null;
+}
+
+export function deleteRequest(id) {
+  const request = getRequest(id);
+  if (!request) return null;
+  const [, day, number] = id.split('-');
+  db.exec('BEGIN');
+  try {
+    const classRow = releaseRequestSeat(request);
+    const deletedActivity = db.prepare(`DELETE FROM activity
+      WHERE request_id = ? OR (? IS NOT NULL AND json_extract(meta, '$.call_id') = ?) RETURNING id`)
+      .all(id, request.call_id, request.call_id);
+    // Keep old request links from reopening a different request with the same ID.
+    db.prepare(`INSERT INTO request_sequences VALUES (?, ?)
+      ON CONFLICT(day) DO UPDATE SET last_number = max(last_number, excluded.last_number)`).run(day, Number(number));
+    db.prepare('DELETE FROM requests WHERE request_id = ?').run(id);
+    db.exec('COMMIT');
+    return { requestId: id, activityIds: deletedActivity.map(row => row.id), class: classRow };
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 // Staff status changes, with seat bookkeeping. Returns { request, classRow, note }.
 export function setRequestStatus(id, status) {
   const r = getRequest(id);
   if (!r) return null;
   let finalStatus = status, note = '';
-  let counted = r.seat_counted;
+  let counted = 0;
   db.exec('BEGIN');
   try {
     // Release whatever this request currently holds.
-    if (r.class_id && counted === 1) setSeats(r.class_id, { seatsDelta: -1 });
-    if (r.class_id && counted === 2) setSeats(r.class_id, { waitDelta: -1 });
-    counted = 0;
+    releaseRequestSeat(r);
     if (status === 'confirmed' && r.class_id) {
       const c = db.prepare('SELECT seats_left, status FROM classes WHERE class_id=?').get(r.class_id);
       if (c && c.seats_left == null) { note = 'Holiday schedule unconfirmed; no seat held.'; }

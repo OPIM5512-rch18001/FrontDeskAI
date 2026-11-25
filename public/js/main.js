@@ -10,8 +10,8 @@ let shellMode = null;
 export function modeToggle(mode) {
   return `<div class="mode-toggle" data-mode="${mode}" role="group" aria-label="Switch between customer and staff view">
     <span class="knob"></span>
-    <button type="button" data-go="customer" aria-pressed="${mode === 'customer'}">${icon('users', 15)} Customer</button>
-    <button type="button" data-go="staff" aria-pressed="${mode === 'staff'}">${icon('grid', 15)} Staff</button>
+    <button type="button" data-go="customer" aria-pressed="${mode === 'customer'}">Customer</button>
+    <button type="button" data-go="staff" aria-pressed="${mode === 'staff'}">Staff</button>
   </div>`;
 }
 function wireToggle(scope) {
@@ -23,10 +23,11 @@ const NAV = [['/', 'Home'], ['/classes', 'Classes'], ['/membership', 'Membership
 function customerShell() {
   document.body.className = 'mode-customer' + (document.body.classList.contains('present') ? ' present' : '');
   $('#app').innerHTML = `
+  ${modeToggle('customer')}
   <header class="site-header" id="hdr"><div class="wrap hdr">
     <a class="brand" href="#/" aria-label="Club Studio home"><b><i></i>Club Studio</b><small>Powered by <em>FrontDesk AI</em></small></a>
     <nav class="nav" id="nav" aria-label="Main">${NAV.map(([p, l]) => `<a href="#${p}" data-p="${p}">${l}</a>`).join('')}</nav>
-    <div class="hdr-right">${modeToggle('customer')}<a class="btn btn-primary btn-sm btn-call" href="#/classes">${icon('cal', 16)} Book a class</a><button class="menu-btn" id="menu" aria-label="Menu" aria-expanded="false">${icon('down', 20)}</button></div>
+    <div class="hdr-right"><a class="btn btn-primary btn-sm btn-call" href="#/classes">${icon('cal', 16)} Book a class</a><button class="menu-btn" id="menu" aria-label="Menu" aria-expanded="false">${icon('down', 20)}</button></div>
   </div></header>
   <main id="main-wrap"></main><div id="footer"></div>`;
   wireToggle($('#app'));

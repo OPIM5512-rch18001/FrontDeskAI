@@ -5,7 +5,7 @@ import { config } from './config.js';
 import {
   listClasses, getClass, listCatalog, listRequests, getRequest, stats, listActivity, resetDemo
 } from './db.js';
-import { submitRequest, staffUpdate, runSimulation, handleRetellEvent } from './service.js';
+import { submitRequest, staffUpdate, staffDelete, runSimulation, handleRetellEvent } from './service.js';
 import { parseDate, resolveClass } from './matcher.js';
 import { addClient, clientCount } from './events.js';
 import { etISO, etDate } from './time.js';
@@ -55,7 +55,7 @@ export async function handleApi(req, res, url) {
   const p = url.pathname.replace(/\/+$/, '');
   const m = req.method;
   if (m === 'OPTIONS') {
-    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization' });
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,x-api-key,Authorization' });
     return res.end();
   }
   const q = Object.fromEntries(url.searchParams);
@@ -109,6 +109,10 @@ export async function handleApi(req, res, url) {
     }
     if (m === 'PATCH' && p.startsWith('/api/requests/')) {
       const out = staffUpdate(decodeURIComponent(p.slice(14)), await readBody(req));
+      return out ? json(res, 200, out) : json(res, 404, { error: 'Request not found' });
+    }
+    if (m === 'DELETE' && p.startsWith('/api/requests/')) {
+      const out = staffDelete(decodeURIComponent(p.slice(14)));
       return out ? json(res, 200, out) : json(res, 404, { error: 'Request not found' });
     }
     if (m === 'GET' && p === '/api/stats') return json(res, 200, stats());
