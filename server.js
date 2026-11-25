@@ -6,6 +6,10 @@ import { config } from './src/config.js';
 import { initDb } from './src/db.js';
 import { handleApi } from './src/api.js';
 
+if (process.env.RENDER === 'true' && (!config.apiKey || !process.env.STAFF_PASSWORD?.trim())) {
+  throw new Error('Set API_KEY and STAFF_PASSWORD in Render before starting FrontDesk AI.');
+}
+
 initDb();
 
 const MIME = {
@@ -34,12 +38,30 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res, url);
 });
 
-server.listen(config.port, '0.0.0.0', () => {
+const agentPort = Number(process.env.RETELL_PORT || 0);
+const host = process.env.HOST || (agentPort ? '127.0.0.1' : '0.0.0.0');
+if (agentPort && !config.apiKey) throw new Error('Set API_KEY before starting the Retell listener.');
+
+if (agentPort) {
+  const retellServer = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost');
+    const callable = req.method === 'POST' && ['/api/bookings', '/api/availability'].includes(url.pathname);
+    if (!callable) { res.writeHead(404); return res.end('Not found'); }
+    // This listener deliberately accepts the key in a header only.
+    if (req.headers['x-api-key'] !== config.apiKey) { res.writeHead(401); return res.end('Unauthorized'); }
+    return handleApi(req, res, url);
+  });
+  retellServer.listen(agentPort, '127.0.0.1', () => {
+    console.log(`  Retell tools only: http://127.0.0.1:${agentPort}`);
+  });
+}
+
+server.listen(config.port, host, () => {
   const lan = Object.values(os.networkInterfaces()).flat().find(i => i && i.family === 'IPv4' && !i.internal)?.address;
   console.log('\n  Club Studio × FrontDesk AI  (unaffiliated class demo)\n');
   console.log(`  Website:   http://localhost:${config.port}`);
   console.log(`  Staff:     http://localhost:${config.port}/#/staff`);
-  if (lan) console.log(`  On LAN:    http://${lan}:${config.port}`);
+  if (lan && host === '0.0.0.0') console.log(`  On LAN:    http://${lan}:${config.port}`);
   console.log(`  Endpoint:  POST /api/bookings   (API key ${config.apiKey ? 'REQUIRED' : 'not required'})`);
   console.log(`  Phone:     ${config.phone || '(not set: showing placeholder)'}\n`);
 });

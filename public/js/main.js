@@ -44,6 +44,29 @@ function mount(wrapSel) {
   return main;
 }
 
+function staffSignIn() {
+  shellMode = 'customer';
+  customerShell();
+  mount('#main-wrap').innerHTML = `<section class="wrap" style="max-width:460px;padding-block:64px">
+    <h1>Staff sign-in</h1>
+    <form id="staff-sign-in">
+      <label for="staff-password">Staff password</label>
+      <input id="staff-password" class="input" type="password" autocomplete="current-password" required>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+      <p id="staff-sign-in-error" role="alert"></p>
+    </form>
+  </section>`;
+  $('#staff-sign-in').onsubmit = async event => {
+    event.preventDefault();
+    const error = $('#staff-sign-in-error');
+    try {
+      await api('/api/staff/session', { method: 'POST', body: { password: $('#staff-password').value } });
+      await route();
+    } catch (err) { error.textContent = err.message; }
+  };
+  document.title = 'Staff sign-in · FrontDesk AI';
+}
+
 async function route() {
   const dlg = $('#modal'); if (dlg?.open) dlg.close();
   if (cleanup) { try { cleanup(); } catch {} cleanup = null; }
@@ -51,6 +74,11 @@ async function route() {
   const [path, qs] = h.split('?');
   const params = new URLSearchParams(qs || '');
   const isStaff = path.startsWith('/staff');
+  if (isStaff) {
+    const session = await api('/api/staff/session').catch(() => null);
+    if (h !== (location.hash.replace(/^#/, '') || '/')) return;
+    if (!session?.signedIn) return staffSignIn();
+  }
   const mode = isStaff ? 'staff' : 'customer';
   if (mode !== shellMode) {
     shellMode = mode;
